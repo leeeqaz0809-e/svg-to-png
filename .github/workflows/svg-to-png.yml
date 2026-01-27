@@ -1,0 +1,65 @@
+name: Convert SVG to PNG
+
+# 触发条件：当 main 分支有 push，且变动的文件包含 .svg 时触发
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '**.svg'
+  # 允许手动触发
+  workflow_dispatch:
+
+# 授予 GITHUB_TOKEN 写权限，以便将生成的 PNG 推送回仓库
+permissions:
+  contents: write
+
+jobs:
+  convert-images:
+    runs-on: ubuntu-latest
+    steps:
+      # 1. 检出代码
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. 安装转换工具 (rsvg-convert)
+      - name: Install librsvg
+        run: sudo apt-get update && sudo apt-get install -y librsvg2-bin
+
+      # 3. 执行转换脚本
+      - name: Convert SVGs to PNGs
+        run: |
+          # 查找当前目录下所有的 .svg 文件
+          find . -name "*.svg" -type f | while read file; do
+            # 获取不带后缀的文件名
+            filename=$(basename -- "$file")
+            extension="${filename##*.}"
+            filename="${filename%.*}"
+            dirname=$(dirname "$file")
+            
+            output_file="$dirname/$filename.png"
+            
+            echo "Converting $file to $output_file ..."
+            
+            # 使用 rsvg-convert 进行转换
+            # -h 1000 表示设置高度为 1000px (宽度自适应)，你可以根据需要修改
+            rsvg-convert -h 1000 "$file" -o "$output_file"
+          done
+
+      # 4. 提交并推送更改
+      - name: Commit and Push changes
+        run: |
+          # 配置 git 用户身份
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # 添加生成的 PNG 文件
+          git add **/*.png
+          
+          # 检查是否有文件需要提交，避免报错
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Auto-generated PNGs from SVGs [skip ci]"
+            git push
+          fi
