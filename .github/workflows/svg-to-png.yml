@@ -1,65 +1,51 @@
-name: Convert SVG to PNG
+name: Convert SVG to PNG (Commit Back)
 
-# 触发条件：当 main 分支有 push，且变动的文件包含 .svg 时触发
 on:
   push:
     branches:
       - main
     paths:
       - '**.svg'
-  # 允许手动触发
   workflow_dispatch:
 
-# 授予 GITHUB_TOKEN 写权限，以便将生成的 PNG 推送回仓库
 permissions:
   contents: write
 
 jobs:
-  convert-images:
+  convert-and-commit:
     runs-on: ubuntu-latest
     steps:
-      # 1. 检出代码
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. 安装转换工具 (rsvg-convert)
       - name: Install librsvg
         run: sudo apt-get update && sudo apt-get install -y librsvg2-bin
 
-      # 3. 执行转换脚本
       - name: Convert SVGs to PNGs
         run: |
-          # 查找当前目录下所有的 .svg 文件
           find . -name "*.svg" -type f | while read file; do
-            # 获取不带后缀的文件名
             filename=$(basename -- "$file")
-            extension="${filename##*.}"
-            filename="${filename%.*}"
             dirname=$(dirname "$file")
-            
+            filename="${filename%.*}"
             output_file="$dirname/$filename.png"
             
             echo "Converting $file to $output_file ..."
-            
-            # 使用 rsvg-convert 进行转换
-            # -h 1000 表示设置高度为 1000px (宽度自适应)，你可以根据需要修改
             rsvg-convert -h 1000 "$file" -o "$output_file"
           done
 
-      # 4. 提交并推送更改
       - name: Commit and Push changes
         run: |
-          # 配置 git 用户身份
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
-          # 添加生成的 PNG 文件
-          git add **/*.png
+          # 1. 先强制添加当前目录下所有文件（这样如果没PNG也不会报错，只会添加其他变动）
+          git add .
           
-          # 检查是否有文件需要提交，避免报错
+          # 2. 检查暂存区里有没有东西
           if git diff --staged --quiet; then
-            echo "No changes to commit"
+            echo "没有发现新生成的 PNG 或文件变动，跳过提交。"
           else
-            git commit -m "Auto-generated PNGs from SVGs [skip ci]"
+            echo "发现变动，正在提交..."
+            git commit -m "Auto-generated PNGs [skip ci]"
             git push
           fi
